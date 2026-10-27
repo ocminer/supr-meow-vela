@@ -16,8 +16,8 @@ one miner instance measured **28.85 and 29.04 inf/s per card** at 240 W caps.
 | GeForce RTX 5080 | single card | Blackwell (SM 120) | 360 | 360.0 | 83.03 | 0.2306 |
 | GeForce RTX 5090 | single card | Blackwell (SM 120) | 450 | 450.0 | 117.89 | 0.2620 |
 
-See the [benchmark sheet](docs/benchmarks-2026-10-27.md) and
-[CSV spreadsheet](docs/benchmarks-2026-10-27.csv) for measurement conditions,
+See the [benchmark sheet](https://github.com/ocminer/supr-meow-vela/blob/v0.1.9/docs/benchmarks-2026-10-27.md) and
+[CSV spreadsheet](https://github.com/ocminer/supr-meow-vela/releases/download/v0.1.9/supr-meow-vela-0.1.9-benchmarks.csv) for measurement conditions,
 clocks and configuration. Power is measured GPU draw. Efficiency is inf/J.
 
 ## Validation
@@ -36,6 +36,7 @@ the hosted runner has no NVIDIA GPU, so Windows GPU mining is not hardware-teste
 - `supr-meow-vela-0.1.9.tar.gz`: Linux x86-64 with HiveOS, MMPOS and SMOS launchers.
 - `supr-meow-vela-hiveos.tar.gz`: HiveOS custom-miner package.
 - `supr-meow-vela-0.1.9-windows-x86_64.zip`: native Windows x64.
+- `supr-meow-vela-0.1.9-benchmarks.csv`: GPU benchmark spreadsheet.
 - Docker: `ocminersupr/supr-meow-vela:0.1.9` and `:latest`.
 
 Archives contain the benchmark Markdown/CSV, applicable licenses and an inner
