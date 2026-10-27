@@ -26,16 +26,22 @@ if [[ ! -x $T-g++ ]]; then
     "gxx_linux-64=13" "gcc_linux-64=13" "sysroot_linux-64=2.17" cmake ninja make perl patchelf
   rm -rf "$W/mamba/pkgs"
 fi
+# conda's GCC specs add "-rpath <env>/lib" to every link; the release must not
+# carry a path from the build machine.
+sed -i 's# %{!static:-rpath [^}]*}##' "$ENV"/lib/gcc/x86_64-conda-linux-gnu/*/specs
 export PATH="$ENV/bin:$CUDA/bin:/usr/bin:/bin"
 
-OSSL="$W/openssl-$OSSL_VER-static"
+# Neutral install prefix: OpenSSL compiles its prefix/module paths into the
+# library. Nothing is ever loaded from them (no-module, no-engine, no-dso).
+OPREFIX=/usr/local/supr-meow-vela-openssl
+OSSL="$W/openssl-$OSSL_VER-stage$OPREFIX"
 if [[ ! -f $OSSL/lib/libssl.a ]]; then
   ( cd "$W" && curl -fsSL -o openssl.tgz \
       "https://github.com/openssl/openssl/releases/download/openssl-$OSSL_VER/openssl-$OSSL_VER.tar.gz" \
     && rm -rf "openssl-$OSSL_VER" && tar xzf openssl.tgz && cd "openssl-$OSSL_VER" \
     && CC=$T-gcc AR=$T-ar RANLIB=$T-ranlib ./Configure linux-x86_64 no-shared no-module no-engine \
-         no-dso no-tests --prefix="$OSSL" --libdir=lib --openssldir=/nonexistent/supr-meow-vela-ssl -fPIC \
-    && make -j"$(nproc)" build_libs && make install_dev ) > "$W/openssl-build.log" 2>&1
+         no-dso no-tests --prefix="$OPREFIX" --libdir=lib --openssldir=/nonexistent/supr-meow-vela-ssl -fPIC \
+    && make -j"$(nproc)" build_libs && make install_dev DESTDIR="$W/openssl-$OSSL_VER-stage" ) > "$W/openssl-build.log" 2>&1
 fi
 
 # rpath-link + allow-shlib-undefined: libcudart/libcublasLt resolve their own
@@ -58,4 +64,5 @@ echo "supr-meow-vela requires up to $need"
 if readelf -d "$B/supr-meow-vela" | grep -qE 'libssl|libcrypto|libstdc\+\+|libgcc_s'; then
   echo "unexpected dynamic OpenSSL/libstdc++ dependency"; exit 1
 fi
+if strings "$B/supr-meow-vela" | grep -qF "$W"; then echo "build path $W embedded in binary"; exit 1; fi
 (cd "$B" && ctest --output-on-failure)
