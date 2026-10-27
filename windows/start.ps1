@@ -16,12 +16,23 @@ if (!(Test-Path $model)) {
     New-Item -ItemType Directory -Force $ModelDir | Out-Null
     $part = "$model.download-$PID"
     Write-Host 'Downloading sd-turbo-int model (~1.2 GB, one time)...'
+    $sources = @('https://vela.suprnova.cc/dl/sd-turbo-int.poisd',
+                 'https://www.suprnova.cc/dl/sd-turbo-int.poisd',
+                 'https://huggingface.co/valereseach/vela-sd-turbo-int-v2/resolve/main/sd-turbo-int.poisd')
     try {
-        & curl.exe --fail --location --retry 5 --proto '=https' --proto-redir '=https' `
-            --output $part 'https://vela.suprnova.cc/dl/sd-turbo-int.poisd'
-        if ($LASTEXITCODE) { throw 'Model download failed' }
-        if ((Get-FileHash $part -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Model checksum mismatch' }
-        Move-Item $part $model
+        foreach ($url in $sources) {
+            Write-Host "Source: $url"
+            & curl.exe --fail --location --retry 3 --connect-timeout 15 --proto '=https' --proto-redir '=https' `
+                --output $part $url
+            if (!$LASTEXITCODE -and (Test-Path $part) -and
+                (Get-FileHash $part -Algorithm SHA256).Hash.ToLowerInvariant() -eq $expected) {
+                Move-Item $part $model
+                break
+            }
+            Write-Host "Download failed or checksum mismatch: $url"
+            if (Test-Path $part) { Remove-Item $part }
+        }
+        if (!(Test-Path $model)) { throw 'Model download failed (all sources)' }
     } finally { if (Test-Path $part) { Remove-Item $part } }
 }
 if ((Get-FileHash $model -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Wrong model file; expected sd-turbo-int.poisd' }

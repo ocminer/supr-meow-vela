@@ -22,6 +22,12 @@ POOL_URL="${POOL_URL:-vela.suprnova.cc:7601}"
 MODEL_DIR="${MODEL_DIR:-/models}"
 MODEL_URL="${MODEL_URL:-https://vela.suprnova.cc/dl/sd-turbo-int.poisd}"
 MODEL_SHA256="${MODEL_SHA256:-ba38ab96b3398e22ea631d8a457350f91833e57463199d063663308513651f36}"
+# Built-in mirrors only for our default model; MODEL_FALLBACK_URL (space-separated, or empty) overrides.
+if [[ -z "${MODEL_FALLBACK_URL+x}" ]]; then
+  MODEL_FALLBACK_URL=""
+  [[ $MODEL_URL == https://vela.suprnova.cc/dl/sd-turbo-int.poisd ]] && \
+    MODEL_FALLBACK_URL="https://www.suprnova.cc/dl/sd-turbo-int.poisd https://huggingface.co/valereseach/vela-sd-turbo-int-v2/resolve/main/sd-turbo-int.poisd"
+fi
 SSHD_UP=0
 
 die() {
@@ -52,9 +58,17 @@ mkdir -p "$MODEL_DIR"
 if [[ -z "${MODEL_PATH:-}" ]]; then
   MODEL_PATH="$MODEL_DIR/$(basename "${MODEL_URL%%\?*}")"
   if [[ ! -s "$MODEL_PATH" ]]; then
-    echo "[entrypoint] downloading model (~1.2 GB, one time): $MODEL_URL"
-    curl -fL --retry 5 --retry-delay 5 -o "$MODEL_PATH.part" "$MODEL_URL" || die "model download failed"
-    mv "$MODEL_PATH.part" "$MODEL_PATH"
+    urls=( "$MODEL_URL" )
+    for u in $MODEL_FALLBACK_URL; do if [[ $u != "$MODEL_URL" ]]; then urls+=( "$u" ); fi; done
+    for url in "${urls[@]}"; do
+      echo "[entrypoint] downloading model (~1.2 GB, one time): $url"
+      if curl -fL --retry 5 --retry-delay 5 --connect-timeout 15 -o "$MODEL_PATH.part" "$url" && [[ -s "$MODEL_PATH.part" ]] && \
+          { [[ -z "$MODEL_SHA256" ]] || echo "${MODEL_SHA256}  ${MODEL_PATH}.part" | sha256sum -c -; }; then
+        mv "$MODEL_PATH.part" "$MODEL_PATH"; break
+      fi
+      echo "[entrypoint] download failed or checksum mismatch: $url"; rm -f "$MODEL_PATH.part"
+    done
+    [[ -s "$MODEL_PATH" ]] || die "model download failed (all sources)"
   else
     echo "[entrypoint] using cached model: $MODEL_PATH"
   fi

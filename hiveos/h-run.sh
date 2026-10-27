@@ -11,19 +11,20 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$(pwd)/lib"
 MODEL_DIR="${MODEL_DIR:-/hive-config/models}"
 MODEL_URL="${MODEL_URL:-https://vela.suprnova.cc/dl/sd-turbo-int.poisd}"
 MODEL_SHA256="${MODEL_SHA256:-ba38ab96b3398e22ea631d8a457350f91833e57463199d063663308513651f36}"
-# A custom URL may serve a different file; only add the built-in mirror for our
-# default model. An explicit MODEL_FALLBACK_URL (including empty) overrides this.
+# A custom URL may serve a different file; only add the built-in mirrors for our
+# default model. An explicit MODEL_FALLBACK_URL (space-separated list, or empty)
+# overrides this.
 if [[ ! ${MODEL_FALLBACK_URL+x} ]]; then
   MODEL_FALLBACK_URL=""
   [[ $MODEL_URL == https://vela.suprnova.cc/dl/sd-turbo-int.poisd ]] && \
-    MODEL_FALLBACK_URL="https://www.suprnova.cc/dl/sd-turbo-int.poisd"
+    MODEL_FALLBACK_URL="https://www.suprnova.cc/dl/sd-turbo-int.poisd https://huggingface.co/valereseach/vela-sd-turbo-int-v2/resolve/main/sd-turbo-int.poisd"
 fi
 if [[ -z $MODEL_PATH ]]; then
   mkdir -p "$MODEL_DIR" || exit 1
   MODEL_PATH="$MODEL_DIR/$(basename "${MODEL_URL%%\?*}")"
   if [[ ! -s $MODEL_PATH ]]; then
     urls=( "$MODEL_URL" )
-    [[ -n $MODEL_FALLBACK_URL && $MODEL_FALLBACK_URL != "$MODEL_URL" ]] && urls+=( "$MODEL_FALLBACK_URL" )
+    for u in $MODEL_FALLBACK_URL; do if [[ $u != "$MODEL_URL" ]]; then urls+=( "$u" ); fi; done
     part="${MODEL_PATH}.part.$$"
     trap 'rm -f -- "$part"' EXIT
     for url in "${urls[@]}"; do

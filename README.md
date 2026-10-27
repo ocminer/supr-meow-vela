@@ -29,23 +29,26 @@ components and models keep their own licenses.
 ## Download
 [GitHub Releases](https://github.com/ocminer/supr-meow-vela/releases) (and mirrored at https://vela.suprnova.cc/dl/):
 
-* `supr-meow-vela-0.1.7.tar.gz` — Linux x86-64 + bundled CUDA 13.3 runtime. One tarball serves **HiveOS** (`h-run.sh`), **MMPOS** (`mmpos-run.sh`) and **SMOS** (`smos-run.sh`) — pick the launcher for your OS; set `POOL_URL` and `WALLET` in the flight sheet. The model downloads automatically if it is not cached.
-* `supr-meow-vela-0.1.7-windows-x86_64.zip` — native **Windows** x64 build (no WSL/Docker). Edit `start.cmd` with your wallet and run it; the model downloads on first start. No TLS on Windows — use the plain-TCP port.
+* `supr-meow-vela-0.1.8.tar.gz` — Linux x86-64 + bundled CUDA 13.3 runtime. One tarball serves **HiveOS** (`h-run.sh`), **MMPOS** (`mmpos-run.sh`) and **SMOS** (`smos-run.sh`) — pick the launcher for your OS; set `POOL_URL` and `WALLET` in the flight sheet. The model downloads automatically if it is not cached.
+* `supr-meow-vela-0.1.8-windows-x86_64.zip` — native **Windows** x64 build (no WSL/Docker). Edit `start.cmd` with your wallet and run it; the model downloads on first start. No TLS on Windows — use the plain-TCP port.
 * `sd-turbo-int.poisd` — the model (~1.2 GB), plus `SHA256SUMS`.
 
 The model's primary URL is `https://vela.suprnova.cc/dl/sd-turbo-int.poisd`;
-`https://www.suprnova.cc/dl/sd-turbo-int.poisd` is its mirror. SHA-256:
+`https://www.suprnova.cc/dl/sd-turbo-int.poisd` and
+`https://huggingface.co/valereseach/vela-sd-turbo-int-v2/resolve/main/sd-turbo-int.poisd`
+are mirrors. SHA-256:
 `ba38ab96b3398e22ea631d8a457350f91833e57463199d063663308513651f36`.
-For the published HiveOS 0.1.1 package, set `MODEL_URL` to either URL in the
+For the published HiveOS 0.1.1 package, set `MODEL_URL` to any of these URLs in the
 flight sheet's extra config; prefer the Vela URL.
 
-The HiveOS launcher (0.1.2 and newer) defaults to the Vela URL and tries the
-Suprnova mirror only if downloading or verifying the primary fails. Downloads
-are checksum-verified before caching; cached files are checked before mining.
+The HiveOS, MMPOS, SMOS, Docker and Windows launchers (0.1.8 and newer) try the
+Vela URL first, then the Suprnova mirror, then Hugging Face, moving on whenever a
+download or its checksum fails. Downloads are checksum-verified before caching;
+cached files are checked before mining.
 An explicit `MODEL_PATH` reuses a local file. `MODEL_URL` overrides the primary;
-for a custom URL, set `MODEL_FALLBACK_URL` explicitly if a mirror is wanted.
-Set `MODEL_FALLBACK_URL=""` to disable fallback. `MODEL_SHA256` can override the
-expected checksum for an explicitly selected model.
+for a custom URL, set `MODEL_FALLBACK_URL` (a space-separated list) explicitly if
+mirrors are wanted. Set `MODEL_FALLBACK_URL=""` to disable fallback. `MODEL_SHA256`
+can override the expected checksum for an explicitly selected model.
 
 ## Usage
 ```
@@ -54,7 +57,7 @@ expected checksum for an explicitly selected model.
 ./supr-meow-vela --bench 20 --batch 8     # throughput
 ./supr-meow-vela --verify-server --port 9010 --mem 1024 --batch 1   # pool verifier (HTTP POST /verify, GET /health)
 ```
-Versions 0.1.6 and 0.1.7 (same kernels) measured **152.04 inf/s on RTX 5090** (600 W cap) at batch 4 × 2 lanes: **+9.6%** over 0.1.5 with matched settings (138.78 inf/s). Outputs are bit-identical to the reference; the test vector and attention/normalization checks also pass on CMP 170HX (SM 80) and RTX 3070 (SM 86). Results depend on clocks, power limits and cooling.
+Versions 0.1.6 to 0.1.8 (same kernels) measured **152.04 inf/s on RTX 5090** (600 W cap) at batch 4 × 2 lanes: **+9.6%** over 0.1.5 with matched settings (138.78 inf/s). Outputs are bit-identical to the reference; the test vector and attention/normalization checks also pass on CMP 170HX (SM 80) and RTX 3070 (SM 86). Results depend on clocks, power limits and cooling.
 
 ## Build
 CUDA 12.8+ (13.3 used for releases), CMake ≥ 3.24, gcc 13. `cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j`.

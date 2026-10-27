@@ -14,6 +14,27 @@ jobs:
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
+      - name: Test start.ps1 model download fallback (suprnova unreachable -> Hugging Face)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/windows/start.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | Format-List | Out-String | Write-Host; throw 'start.ps1 does not parse' }
+          $t = Join-Path $env:RUNNER_TEMP 'start-ps1-test'
+          New-Item -ItemType Directory -Force $t | Out-Null
+          (Get-Content -Raw windows/start.ps1).
+            Replace('https://vela.suprnova.cc/dl/', 'https://127.0.0.1:9/dl/').
+            Replace('https://www.suprnova.cc/dl/', 'https://127.0.0.1:9/mirror/') | Set-Content "$t/start.ps1"
+          Copy-Item "$env:SystemRoot/System32/hostname.exe" "$t/supr-meow-vela.exe"
+          $log = & pwsh -NoProfile -File "$t/start.ps1" -Wallet test 2>&1 | Out-String
+          Write-Host $log
+          if ($log -notmatch 'huggingface\.co') { throw 'Hugging Face fallback was not tried' }
+          $hash = (Get-FileHash "$t/models/sd-turbo-int.poisd" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'ba38ab96b3398e22ea631d8a457350f91833e57463199d063663308513651f36') { throw "wrong model hash $hash" }
+          if (Get-ChildItem "$t/models" -Filter '*.download-*') { throw 'partial download left behind' }
+          Remove-Item -Recurse -Force $t
+          $global:LASTEXITCODE = 0
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
@@ -74,7 +95,7 @@ jobs:
       - name: Upload native package
         uses: actions/upload-artifact@v4
         with:
-          name: supr-meow-vela-0.1.7-windows-x86_64
+          name: supr-meow-vela-0.1.8-windows-x86_64
           path: dist/*
           if-no-files-found: error
       - name: Upload diagnostics

@@ -1,14 +1,15 @@
 # Docker deployment
 
-`ocminersupr/supr-meow-vela:0.1.7` (also `:latest`). Install the NVIDIA Container
+`ocminersupr/supr-meow-vela:0.1.8` (also `:latest`). Install the NVIDIA Container
 Toolkit on the host. Keep a persistent model cache; the ~1.2 GB sd-turbo-int
-model downloads automatically on first start (default pinned, checksum-verified).
+model downloads automatically on first start (default pinned, checksum-verified;
+Vela URL, then the Suprnova and Hugging Face mirrors).
 
 ```sh
 docker run -d --name vela --gpus '"device=0"' --restart unless-stopped \
   -v vela-models:/models \
   -e WALLET='vela1…YOUR_ADDRESS' -e WORKER=rig1 \
-  ocminersupr/supr-meow-vela:0.1.7
+  ocminersupr/supr-meow-vela:0.1.8
 ```
 
 `POOL_URL` defaults to `vela.suprnova.cc:7601`. `PASSWORD` defaults to `x`.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the actual HiveOS launcher with local HTTP fixtures and no GPU."""
+"""Exercise the actual mining-OS launchers with local HTTP fixtures and no GPU."""
 import hashlib
 import http.server
 import json
@@ -16,6 +16,7 @@ MODEL = b'vela model download fixture\n'
 SHA = hashlib.sha256(MODEL).hexdigest()
 PRIMARY = 'https://vela.suprnova.cc/dl/sd-turbo-int.poisd'
 MIRROR = 'https://www.suprnova.cc/dl/sd-turbo-int.poisd'
+HF = 'https://huggingface.co/valereseach/vela-sd-turbo-int-v2/resolve/main/sd-turbo-int.poisd'
 # HiveOS images based on Ubuntu 18.04 ship curl 7.58, which exits 2 on any
 # option added later (e.g. --no-progress-meter, curl 7.67). The fixture curl
 # rejects these the same way so launchers must stay compatible.
@@ -24,12 +25,14 @@ NEWER_CURL_OPTIONS = ['--no-progress-meter', '--retry-all-errors', '--fail-with-
 
 
 class DownloadTests(unittest.TestCase):
+    LAUNCHER = 'hiveos/h-run.sh'
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='vela-hiveos-download-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.requests = []
-        self.routes = {'/primary': MODEL, '/mirror': MODEL, '/custom': MODEL}
+        self.routes = {'/primary': MODEL, '/mirror': MODEL, '/hf': MODEL, '/custom': MODEL}
         owner = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -50,7 +53,9 @@ class DownloadTests(unittest.TestCase):
         self.thread.start()
         self.addCleanup(self.stop_server)
         self.base = 'http://127.0.0.1:' + str(self.server.server_port)
-        shutil.copy(SOURCE/'hiveos/h-run.sh', self.root/'h-run.sh')
+        self.script = self.root/'launcher.sh'
+        self.script.write_text((SOURCE/self.LAUNCHER).read_text()
+                               .replace('/app/supr-meow-vela', str(self.root/'supr-meow-vela')))
         (self.root/'h-manifest.conf').write_text(
             f'CUSTOM_CONFIG_FILENAME="{self.root}/unused.conf"\n'
             f'CUSTOM_LOG_BASENAME="{self.root}/miner"\n')
@@ -66,7 +71,7 @@ class DownloadTests(unittest.TestCase):
         # still use the real curl and checksum tools, including HTTP failures.
         wrapper = bindir/'curl'
         wrapper.write_text('#!/usr/bin/env python3\nimport os,sys\n'
-            f'mapping={json.dumps({PRIMARY:self.base+"/primary", MIRROR:self.base+"/mirror"})}\n'
+            f'mapping={json.dumps({PRIMARY:self.base+"/primary", MIRROR:self.base+"/mirror", HF:self.base+"/hf"})}\n'
             f'newer={NEWER_CURL_OPTIONS!r}\n'
             'bad=[a for a in sys.argv[1:] if a in newer]\n'
             'if bad: sys.stderr.write("curl: option "+bad[0]+": is unknown\\n"); sys.exit(2)\n'
@@ -85,12 +90,12 @@ class DownloadTests(unittest.TestCase):
         self.thread.join()
 
     def launch(self, success=True, **env):
-        result = subprocess.run(['bash', str(self.root/'h-run.sh')],
+        result = subprocess.run(['bash', str(self.script)],
             env={**self.env, **env}, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, timeout=20)
         self.assertEqual(result.returncode == 0, success, result.stdout)
         self.assertEqual('MINER_STARTED' in result.stdout, success, result.stdout)
-        self.assertFalse(list(self.cache.glob('*.part.*')))
+        self.assertFalse(list(self.cache.glob('*.part*')))
         return result
 
     def test_primary_success_never_fetches_mirror(self):
@@ -110,10 +115,16 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(self.requests, ['/primary', '/mirror'])
         self.assertEqual(self.cached.read_bytes(), MODEL)
 
-    def test_both_sources_fail_without_cached_partial(self):
+    def test_suprnova_failures_use_huggingface(self):
         self.routes.update({'/primary': None, '/mirror': b'wrong model'})
+        self.launch()
+        self.assertEqual(self.requests, ['/primary', '/mirror', '/hf'])
+        self.assertEqual(self.cached.read_bytes(), MODEL)
+
+    def test_all_sources_fail_without_cached_partial(self):
+        self.routes.update({'/primary': None, '/mirror': b'wrong model', '/hf': None})
         self.launch(success=False)
-        self.assertEqual(self.requests, ['/primary', '/mirror'])
+        self.assertEqual(self.requests, ['/primary', '/mirror', '/hf'])
         self.assertFalse(self.cached.exists())
 
     def test_valid_cache_skips_network(self):
@@ -144,18 +155,47 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(self.requests, ['/custom', '/mirror'])
         self.assertEqual((self.cache/'custom').read_bytes(), MODEL)
 
+    def test_fallback_list_is_tried_in_order(self):
+        self.routes.update({'/primary': None, '/custom': None})
+        self.launch(MODEL_FALLBACK_URL=self.base+'/custom '+self.base+'/hf')
+        self.assertEqual(self.requests, ['/primary', '/custom', '/hf'])
+
     def test_empty_fallback_disables_mirror(self):
         self.routes['/primary'] = None
         self.launch(success=False, MODEL_FALLBACK_URL='')
         self.assertEqual(self.requests, ['/primary'])
 
 
+class MmposDownloadTests(DownloadTests):
+    LAUNCHER = 'mmpos/mmpos-run.sh'
+
+    def test_bad_cache_cannot_start_miner(self):
+        self.cached.write_bytes(b'corrupt cache')
+        self.launch(success=False)
+        self.assertEqual(self.requests, [])
+
+
+class SmosDownloadTests(MmposDownloadTests):
+    LAUNCHER = 'smos/smos-run.sh'
+
+
+class DockerDownloadTests(MmposDownloadTests):
+    LAUNCHER = 'docker/entrypoint.sh'
+
+
 class LauncherCurlCompatibility(unittest.TestCase):
     def test_launchers_avoid_newer_curl_options(self):
-        for rel in ['hiveos/h-run.sh', 'mmpos/mmpos-run.sh', 'smos/smos-run.sh']:
+        for rel in ['hiveos/h-run.sh', 'mmpos/mmpos-run.sh', 'smos/smos-run.sh', 'docker/entrypoint.sh']:
             text = (SOURCE/rel).read_text()
             for opt in NEWER_CURL_OPTIONS:
                 self.assertNotIn(opt, text, rel)
+
+    def test_every_launcher_lists_all_mirrors(self):
+        for rel in ['hiveos/h-run.sh', 'mmpos/mmpos-run.sh', 'smos/smos-run.sh', 'docker/entrypoint.sh',
+                    'windows/start.ps1']:
+            text = (SOURCE/rel).read_text()
+            for url in [PRIMARY, MIRROR, HF]:
+                self.assertIn(url, text, rel)
 
 
 if __name__ == '__main__':
