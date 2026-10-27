@@ -29,7 +29,7 @@ if [[ -z $MODEL_PATH ]]; then
     for url in "${urls[@]}"; do
       echo "[supr-meow-vela] downloading model (1.2 GB, one time): $url"
       if curl -fL --retry 2 --retry-delay 2 --connect-timeout 15 \
-          --speed-time 60 --speed-limit 1024 --no-progress-meter -o "$part" "$url" && \
+          --speed-time 60 --speed-limit 1024 -sS -o "$part" "$url" && \
           [[ -s $part ]] && echo "${MODEL_SHA256}  ${part}" | sha256sum -c -; then
         mv -- "$part" "$MODEL_PATH" || exit 1
         break

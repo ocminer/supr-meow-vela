@@ -16,6 +16,11 @@ MODEL = b'vela model download fixture\n'
 SHA = hashlib.sha256(MODEL).hexdigest()
 PRIMARY = 'https://vela.suprnova.cc/dl/sd-turbo-int.poisd'
 MIRROR = 'https://www.suprnova.cc/dl/sd-turbo-int.poisd'
+# HiveOS images based on Ubuntu 18.04 ship curl 7.58, which exits 2 on any
+# option added later (e.g. --no-progress-meter, curl 7.67). The fixture curl
+# rejects these the same way so launchers must stay compatible.
+NEWER_CURL_OPTIONS = ['--no-progress-meter', '--retry-all-errors', '--fail-with-body',
+                      '--parallel', '--retry-connrefused', '--output-dir', '--create-dirs-mode']
 
 
 class DownloadTests(unittest.TestCase):
@@ -62,6 +67,9 @@ class DownloadTests(unittest.TestCase):
         wrapper = bindir/'curl'
         wrapper.write_text('#!/usr/bin/env python3\nimport os,sys\n'
             f'mapping={json.dumps({PRIMARY:self.base+"/primary", MIRROR:self.base+"/mirror"})}\n'
+            f'newer={NEWER_CURL_OPTIONS!r}\n'
+            'bad=[a for a in sys.argv[1:] if a in newer]\n'
+            'if bad: sys.stderr.write("curl: option "+bad[0]+": is unknown\\n"); sys.exit(2)\n'
             'args=[mapping.get(a,a) for a in sys.argv[1:]]\n'
             f'os.execv({shutil.which("curl")!r}, ["curl"]+args)\n')
         wrapper.chmod(0o755)
@@ -140,6 +148,14 @@ class DownloadTests(unittest.TestCase):
         self.routes['/primary'] = None
         self.launch(success=False, MODEL_FALLBACK_URL='')
         self.assertEqual(self.requests, ['/primary'])
+
+
+class LauncherCurlCompatibility(unittest.TestCase):
+    def test_launchers_avoid_newer_curl_options(self):
+        for rel in ['hiveos/h-run.sh', 'mmpos/mmpos-run.sh', 'smos/smos-run.sh']:
+            text = (SOURCE/rel).read_text()
+            for opt in NEWER_CURL_OPTIONS:
+                self.assertNotIn(opt, text, rel)
 
 
 if __name__ == '__main__':

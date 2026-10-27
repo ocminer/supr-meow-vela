@@ -22,7 +22,7 @@ if [[ -z $MODEL_PATH ]]; then
   mkdir -p "$MODEL_DIR"; MODEL_PATH="$MODEL_DIR/$(basename "${MODEL_URL%%\?*}")"
   if [[ ! -s $MODEL_PATH ]]; then
     echo "[supr-meow-vela] downloading model (~1.2 GB, one time): $MODEL_URL"
-    curl -fL --retry 5 --no-progress-meter -o "$MODEL_PATH.part" "$MODEL_URL" || exit 1
+    curl -fL --retry 5 -sS -o "$MODEL_PATH.part" "$MODEL_URL" || exit 1
     mv "$MODEL_PATH.part" "$MODEL_PATH"
   fi
   [[ -n $MODEL_SHA256 ]] && { echo "${MODEL_SHA256}  ${MODEL_PATH}" | sha256sum -c - || { echo "[supr-meow-vela] model checksum mismatch — refusing to mine"; rm -f "$MODEL_PATH"; exit 1; }; }
