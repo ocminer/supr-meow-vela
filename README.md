@@ -62,8 +62,11 @@ Versions 0.1.6 to 0.1.8 (same kernels) measured **152.04 inf/s on RTX 5090** (60
 ## Build
 CUDA 12.8+ (13.3 used for releases), CMake ≥ 3.24, gcc 13. `cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j`.
 Release tarballs ship `lib/libcudart.so.13` and `lib/libcublasLt.so.13` next to the binary (RPATH `$ORIGIN/lib`); the NVIDIA driver must be ≥ R580 (CUDA 13).
-The Linux packages require glibc 2.38 or newer and OpenSSL 3. The Docker image
-includes a compatible userspace for hosts with an older distribution.
+The Linux packages run on Ubuntu 20.04 or newer (glibc 2.31+, including current
+HiveOS, MMPOS and SMOS images); OpenSSL is built in, so no system OpenSSL is needed.
+Release binaries are built with `scripts/build-linux-portable.sh` (GCC 13 with a
+glibc 2.17 sysroot, static OpenSSL 3 and libstdc++), then packaged with
+`BUILD_DIR=<build-dir> scripts/package.sh`.
 
 Build with `-DMEOW_BUILD_TESTS=ON` and run `ctest --test-dir build --output-on-failure` for CPU tests.
 For GPU arithmetic checks, select an available card with `CUDA_VISIBLE_DEVICES`

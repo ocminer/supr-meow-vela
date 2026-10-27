@@ -9,7 +9,7 @@ LABEL org.opencontainers.image.title="supr-meow-vela" \
       org.opencontainers.image.source="https://github.com/ocminer/supr-meow-vela"
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl libgomp1 libssl3 openssh-server \
+      ca-certificates curl libgomp1 openssh-server \
     && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_*
 WORKDIR /app
 COPY dist/supr-meow-vela-${VERSION}/ /app/
