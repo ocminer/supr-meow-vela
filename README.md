@@ -29,6 +29,11 @@ components and models keep their own licenses.
 ## Download
 [GitHub Releases](https://github.com/ocminer/supr-meow-vela/releases) (and mirrored at https://vela.suprnova.cc/dl/):
 
+> **HiveOS / MMPOS / SMOS: works on older images since 0.1.8.** Linux packages up to 0.1.7 needed glibc 2.38 and
+> stopped with `version 'GLIBC_2.36' not found` / `'GLIBC_2.38' not found` on most mining OS images. From 0.1.8 the
+> Linux build runs on **Ubuntu 20.04 up to the latest release** (glibc 2.31+, OpenSSL built in), and the model
+> downloads automatically from suprnova.cc or Hugging Face. Just update the custom miner to 0.1.8.
+
 * `supr-meow-vela-0.1.8.tar.gz` — Linux x86-64 + bundled CUDA 13.3 runtime. One tarball serves **HiveOS** (`h-run.sh`), **MMPOS** (`mmpos-run.sh`) and **SMOS** (`smos-run.sh`) — pick the launcher for your OS; set `POOL_URL` and `WALLET` in the flight sheet. The model downloads automatically if it is not cached.
 * `supr-meow-vela-0.1.8-windows-x86_64.zip` — native **Windows** x64 build (no WSL/Docker). Edit `start.cmd` with your wallet and run it; the model downloads on first start. No TLS on Windows — use the plain-TCP port.
 * `sd-turbo-int.poisd` — the model (~1.2 GB), plus `SHA256SUMS`.
