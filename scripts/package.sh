@@ -4,7 +4,7 @@
 # Run on the build host after `cmake --build <build-dir>`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VER=${1:-0.1.8}
+VER=${1:-0.1.9}
 BUILD=${BUILD_DIR:-build-release}
 CUDA=${CUDA_HOME:-/usr/local/cuda-13.3}
 D=dist/supr-meow-vela-$VER
@@ -14,8 +14,9 @@ cp "$BUILD/supr-meow-vela" "$D/"; strip "$D/supr-meow-vela"
 cp "$CUDA/targets/x86_64-linux/lib/libcudart.so.13" "$CUDA/targets/x86_64-linux/lib/libcublasLt.so.13" "$D/lib/"
 cp README.md LICENSE NOTICE "$D/"
 cp RELEASE-v"$VER".md "$D/"
-mkdir -p "$D/licenses"
-cp licenses/nlohmann-json-LICENSE.txt "$D/licenses/"
+mkdir -p "$D/licenses" "$D/docs"
+cp licenses/*.txt "$D/licenses/"
+cp docs/benchmarks-2026-10-27.md docs/benchmarks-2026-10-27.csv "$D/docs/"
 cp "$CUDA/EULA.txt" "$D/licenses/NVIDIA-CUDA-EULA.txt"
 printf '{"version":"%s","source_commit":"%s","cuda":"13.3","architectures":[80,86,89,90,100,120]}\n' \
   "$VER" "$(git rev-parse HEAD)" > "$D/BUILD-INFO.json"

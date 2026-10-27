@@ -1,4 +1,4 @@
-# Next release — unreleased
+# supr-meow-vela v0.1.9
 
 RTX 3070 throughput improved from **25.18 to 28.47 inf/s (+13.1%)** in matched
 live mining at a 220 W power cap, with zero rejected shares. Two RTX 3070s in
@@ -22,13 +22,35 @@ clocks and configuration. Power is measured GPU draw. Efficiency is inf/J.
 
 ## Validation
 
-The Linux development binary passed consensus-vector and attention checks on
+The qualified Linux binary passed consensus-vector and attention checks on
 all five measured GPU types. Full inference outputs matched the published
 reference byte for byte across multiple seeds, prompts and batch sizes, in
 CUDA Graph and eager execution. Live mining passed on single-card and two-card
 instances. A lower-target CUDA build also passed correctness checks on an
-RTX 3070. These measurements qualify the identified Linux binary; Windows
-builds and final release packages have not been produced for this update yet.
+RTX 3070. The release preserves the measured GPU code. Native Windows CI validates
+CPU arithmetic, networking, model download fallback and packaged startup;
+the hosted runner has no NVIDIA GPU, so Windows GPU mining is not hardware-tested.
+
+## Downloads and compatibility
+
+- `supr-meow-vela-0.1.9.tar.gz`: Linux x86-64 with HiveOS, MMPOS and SMOS launchers.
+- `supr-meow-vela-hiveos.tar.gz`: HiveOS custom-miner package.
+- `supr-meow-vela-0.1.9-windows-x86_64.zip`: native Windows x64.
+- Docker: `ocminersupr/supr-meow-vela:0.1.9` and `:latest`.
+
+Archives contain the benchmark Markdown/CSV, applicable licenses and an inner
+file manifest. Download checksums are supplied separately. All six CUDA targets
+(SM 80, 86, 89, 90, 100 and 120) are included, using CUDA 13.3.
+
+Linux supports Ubuntu 20.04 and newer, including current HiveOS, MMPOS and SMOS
+images; OpenSSL and the C++ runtime are linked in. A CUDA 13-capable NVIDIA driver
+(R580+) is required. Windows uses plain TCP; Linux/Docker also support TLS.
+The Windows README now identifies the correct version. Packages include notices
+for the static Linux OpenSSL and GCC runtime libraries as well as the CUDA runtime.
+
+Model download order remains Vela, Suprnova mirror, then Hugging Face, with
+SHA-256 verification and cache reuse. The existing `sd-turbo-int.poisd` model
+is unchanged; there is no need to download it again.
 
 ## License
 

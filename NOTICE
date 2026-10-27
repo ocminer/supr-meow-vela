@@ -20,3 +20,21 @@ nlohmann/json — MIT
 --------------------------------------------------------------------------------
 The sd-turbo-int model mined against is licensed by its respective authors and
 is not distributed with this software.
+
+--------------------------------------------------------------------------------
+Portable Linux release builds also link these libraries statically:
+
+OpenSSL 3.0.18 — Apache License 2.0
+    Copyright the OpenSSL Project Authors.
+    Full license: licenses/OpenSSL-LICENSE.txt
+    Source: https://github.com/openssl/openssl/tree/openssl-3.0.18
+
+GCC 13 runtime libraries (libstdc++ and libgcc) — GPLv3 with the
+GCC Runtime Library Exception 3.1.
+    Copyright the Free Software Foundation, Inc.
+    Full terms: licenses/GCC-GPL-3.txt and
+    licenses/GCC-Runtime-Library-Exception.txt
+    Source: https://gcc.gnu.org/releases.html
+
+These third-party terms do not replace the miner's LICENSE. The GCC Runtime
+Library Exception applies to the eligible runtime-library combinations.

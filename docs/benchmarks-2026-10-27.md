@@ -1,6 +1,6 @@
-# Vela development benchmarks — 2026-10-27
+# Vela v0.1.9 benchmarks — 2026-10-27
 
-Status: **unreleased optimized build after v0.1.8**. [Spreadsheet CSV](benchmarks-2026-10-27.csv).
+Vela **v0.1.9** uses the measured GPU kernels. [Spreadsheet CSV](benchmarks-2026-10-27.csv).
 
 | GPU | Sample | Architecture | Power cap (W) | GPU draw (W) | inf/s | inf/J |
 |---|---|---|---:|---:|---:|---:|
@@ -14,7 +14,7 @@ Status: **unreleased optimized build after v0.1.8**. [Spreadsheet CSV](benchmark
 
 ## Measurement method
 
-Measurements taken on 2026-10-27 with the same optimized Linux development
+Measurements taken on 2026-10-27 with the same qualified optimized Linux benchmark
 binary, CUDA 13.3 runtime, the standard `sd-turbo-int.poisd` model, batch 4 and
 2 lanes per GPU. Each run used four minutes of live pool mining. The first
 minute and incomplete reporting intervals were excluded. Throughput is the
@@ -36,10 +36,10 @@ operation within the temperature limit. The RTX 5090 result is at a 450 W cap;
 it is not directly comparable to earlier 600 W measurements.
 
 Seven physical GPUs across five GPU types are represented. This table makes
-no performance claim for unmeasured GPUs. This is a development-build
-snapshot; a future release with different GPU code needs new measurements.
+no performance claim for unmeasured GPUs. The release uses the same GPU code as this qualified benchmark build. A
+future release with different GPU code needs new measurements.
 
-Benchmark binary SHA-256: `51838dff7bda5daa245cd820850c9cc7d15707bea1aa2ec586593799cdeafacc`.
+Qualified benchmark binary SHA-256 (before the version-string change): `51838dff7bda5daa245cd820850c9cc7d15707bea1aa2ec586593799cdeafacc`.
 
 ## Matched improvement over v0.1.8
 

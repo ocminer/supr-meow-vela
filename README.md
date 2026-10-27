@@ -32,10 +32,10 @@ components and models keep their own licenses.
 > **HiveOS / MMPOS / SMOS: works on older images since 0.1.8.** Linux packages up to 0.1.7 needed glibc 2.38 and
 > stopped with `version 'GLIBC_2.36' not found` / `'GLIBC_2.38' not found` on most mining OS images. From 0.1.8 the
 > Linux build runs on **Ubuntu 20.04 up to the latest release** (glibc 2.31+, OpenSSL built in), and the model
-> downloads automatically from suprnova.cc or Hugging Face. Just update the custom miner to 0.1.8.
+> downloads automatically from suprnova.cc or Hugging Face. Update the custom miner to 0.1.9.
 
-* `supr-meow-vela-0.1.8.tar.gz` — Linux x86-64 + bundled CUDA 13.3 runtime. One tarball serves **HiveOS** (`h-run.sh`), **MMPOS** (`mmpos-run.sh`) and **SMOS** (`smos-run.sh`) — pick the launcher for your OS; set `POOL_URL` and `WALLET` in the flight sheet. The model downloads automatically if it is not cached.
-* `supr-meow-vela-0.1.8-windows-x86_64.zip` — native **Windows** x64 build (no WSL/Docker). Edit `start.cmd` with your wallet and run it; the model downloads on first start. No TLS on Windows — use the plain-TCP port.
+* `supr-meow-vela-0.1.9.tar.gz` — Linux x86-64 + bundled CUDA 13.3 runtime. One tarball serves **HiveOS** (`h-run.sh`), **MMPOS** (`mmpos-run.sh`) and **SMOS** (`smos-run.sh`) — pick the launcher for your OS; set `POOL_URL` and `WALLET` in the flight sheet. The model downloads automatically if it is not cached.
+* `supr-meow-vela-0.1.9-windows-x86_64.zip` — native **Windows** x64 build (no WSL/Docker). Edit `start.cmd` with your wallet and run it; the model downloads on first start. No TLS on Windows — use the plain-TCP port.
 * `sd-turbo-int.poisd` — the model (~1.2 GB), plus `SHA256SUMS`.
 
 The model's primary URL is `https://vela.suprnova.cc/dl/sd-turbo-int.poisd`;
@@ -64,11 +64,11 @@ can override the expected checksum for an explicitly selected model.
 ```
 Versions 0.1.6 to 0.1.8 (same kernels) measured **152.04 inf/s on RTX 5090** (600 W cap) at batch 4 × 2 lanes: **+9.6%** over 0.1.5 with matched settings (138.78 inf/s). Outputs are bit-identical to the reference; the test vector and attention/normalization checks also pass on CMP 170HX (SM 80) and RTX 3070 (SM 86). Results depend on clocks, power limits and cooling.
 
-The **unreleased optimized build after 0.1.8** measured **28.47 inf/s on RTX 3070**
+Version **0.1.9** measured **28.47 inf/s on RTX 3070**
 at a 220 W cap, **+13.1%** over the published 0.1.8 build with matched settings.
 The [fleet benchmark sheet](docs/benchmarks-2026-10-27.md) and
 [CSV spreadsheet](docs/benchmarks-2026-10-27.csv) list GPU architecture, measured
-power draw, throughput and efficiency. See [next release notes](RELEASE-NEXT.md).
+power draw, throughput and efficiency. See [0.1.9 release notes](RELEASE-v0.1.9.md).
 
 ## Build
 CUDA 12.8+ (13.3 used for releases), CMake ≥ 3.24, gcc 13. `cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j`.
