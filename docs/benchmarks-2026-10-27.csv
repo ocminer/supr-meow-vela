@@ -1,0 +1,8 @@
+gpu,sample,architecture,cap_w,power_w,inf_s,inf_j,sm_mhz,mem_mhz,batch,lanes,cards_per_instance,workspace_mib_per_lane,rate_samples
+GeForce RTX 3070,single card,Ampere (SM 86),220,219.440,28.471,0.129742,1710.174,6801.000,4,2,1,auto,17
+GeForce RTX 3070,two-card instance A,Ampere (SM 86),240.0,239.296,28.847,0.120550,1739.829,6801.000,4,2,2,2048,17
+GeForce RTX 3070,two-card instance B,Ampere (SM 86),240.0,239.296,29.035,0.121336,1760.571,6801.000,4,2,2,2048,17
+GeForce RTX 4070 Ti SUPER,single card,Ada (SM 89),285.0,284.011,52.778,0.185830,2652.000,10251.000,4,2,1,2048,18
+CMP 170HX,single card,Ampere (SM 80),200.0,198.516,36.094,0.181819,1260.086,1728.000,4,2,1,2048,17
+GeForce RTX 5080,single card,Blackwell (SM 120),360.0,359.993,83.029,0.230641,2666.709,14801.000,4,2,1,2048,17
+GeForce RTX 5090,single card,Blackwell (SM 120),450.0,449.991,117.894,0.261992,1815.236,13801.000,4,2,1,2048,17

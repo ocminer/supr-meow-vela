@@ -64,6 +64,12 @@ can override the expected checksum for an explicitly selected model.
 ```
 Versions 0.1.6 to 0.1.8 (same kernels) measured **152.04 inf/s on RTX 5090** (600 W cap) at batch 4 × 2 lanes: **+9.6%** over 0.1.5 with matched settings (138.78 inf/s). Outputs are bit-identical to the reference; the test vector and attention/normalization checks also pass on CMP 170HX (SM 80) and RTX 3070 (SM 86). Results depend on clocks, power limits and cooling.
 
+The **unreleased optimized build after 0.1.8** measured **28.47 inf/s on RTX 3070**
+at a 220 W cap, **+13.1%** over the published 0.1.8 build with matched settings.
+The [fleet benchmark sheet](docs/benchmarks-2026-10-27.md) and
+[CSV spreadsheet](docs/benchmarks-2026-10-27.csv) list GPU architecture, measured
+power draw, throughput and efficiency. See [next release notes](RELEASE-NEXT.md).
+
 ## Build
 CUDA 12.8+ (13.3 used for releases), CMake ≥ 3.24, gcc 13. `cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j`.
 Release tarballs ship `lib/libcudart.so.13` and `lib/libcublasLt.so.13` next to the binary (RPATH `$ORIGIN/lib`); the NVIDIA driver must be ≥ R580 (CUDA 13).

@@ -349,7 +349,7 @@ template <int R4> __device__ __forceinline__ void quant_row_out_w4_regs(const in
 }
 template <int R4>
 __global__ void lnorm_qw_k(const int32_t* __restrict__ X, int M, int C, const int32_t* __restrict__ g, const int32_t* __restrict__ beta, i64 den, int8_t* __restrict__ hi, int8_t* __restrict__ lo, int32_t* __restrict__ e, int Kp) {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 890 || __CUDA_ARCH__ >= 1200)
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 860 || __CUDA_ARCH__ == 890 || __CUDA_ARCH__ >= 1200)
 
     const int lane = threadIdx.x & 31; const size_t row = size_t(blockIdx.x) * 8 + (threadIdx.x >> 5);
     if (row >= size_t(M)) return;
@@ -420,7 +420,7 @@ __global__ void lnorm_qw_k(const int32_t* __restrict__ X, int M, int C, const in
 template <int R4>
 __global__ void gn_apply_roww_k(const int32_t* __restrict__ X, size_t M, int T, int C, int groups, const GnStat* __restrict__ gs, const int32_t* __restrict__ g, const int32_t* __restrict__ beta, const int32_t* __restrict__ Lsig,
                                 int32_t* __restrict__ Y, u32* __restrict__ pm, int8_t* __restrict__ hi, int8_t* __restrict__ lo, int32_t* __restrict__ e, int Kp) {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1200)
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 860 || __CUDA_ARCH__ >= 1200)
 
     __shared__ GnStat sgs[8][32]; __shared__ unsigned long long sinv[8][32];
     const int lane = threadIdx.x & 31; const int wrow = threadIdx.x >> 5; const size_t row = size_t(blockIdx.x) * 8 + wrow;

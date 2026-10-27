@@ -10,6 +10,7 @@
 #include <climits>
 #include <stdexcept>
 #include <cstddef>
+#include <type_traits>
 
 namespace meow {
 namespace {
@@ -81,6 +82,14 @@ __device__ __forceinline__ int score(int hh, int T, int sh) {
     const int neg = -sh; const i64 lim = 1LL << (62 - neg); const i64 v = (S < -lim ? -lim : (S > lim ? lim : S)) << neg;
     return int(v < INT_MIN ? INT_MIN : (v > INT_MAX ? INT_MAX : v));
 }
+/** E <= sumE and r = floor(2^62 / sumE) imply E*r <= 2^62.
+ * Its high word therefore fits 31 bits even when rhi > 1. The low word
+ * cannot carry into bit 46 when rounding, so the same high-word formula
+ * handles every valid reciprocal without a per-element fallback. */
+__device__ __forceinline__ unsigned probability_round(unsigned E, unsigned rlo, unsigned rhi) {
+    const unsigned hi = __umulhi(E, rlo) + E * rhi;
+    return (hi + (1u << 14)) >> 15;
+}
 /** E = LUT(z) for z = mx - s >= 0 (uint32), 0 when z >= 2^20. Branchless. */
 __device__ __forceinline__ int lutexp32(unsigned z, const int32_t* L) {
     unsigned zc = z < (16u << 16) ? z : ((16u << 16) - 1);
@@ -110,8 +119,13 @@ __device__ __forceinline__ int score_u(int hh, int T, int sh, int cls) {
     return score(hh, T, sh);
 }
 
-template <int PASS, bool Unmasked>
-__global__ void __launch_bounds__(NTHR, (TQ == 64 ? (PASS == 2 ? 2 : 3) : 1)) attn_pass_k(
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 860
+constexpr int ATTN_P01_MIN_BLOCKS = 4;
+#else
+constexpr int ATTN_P01_MIN_BLOCKS = 3;
+#endif
+template <int PASS, bool Unmasked, bool CompactP1 = false>
+__global__ void __launch_bounds__(NTHR, (TQ == 64 ? (PASS == 2 ? 2 : ATTN_P01_MIN_BLOCKS) : 1)) attn_pass_k(
     const int8_t* __restrict__ qhi, const int8_t* __restrict__ qlo, const int32_t* __restrict__ eq, const i64* __restrict__ qhs, const i64* __restrict__ qls,
     const int8_t* __restrict__ khi, const int8_t* __restrict__ klo, const int32_t* __restrict__ ek, const i64* __restrict__ ksum,
     const int8_t* __restrict__ vthi, const int8_t* __restrict__ vtlo, const int32_t* __restrict__ ev, const i64* __restrict__ vsum,
@@ -128,7 +142,11 @@ __global__ void __launch_bounds__(NTHR, (TQ == 64 ? (PASS == 2 ? 2 : 3) : 1)) at
     // Q = 256*qh + qlu with qlu = q & 255 (unsigned lo plane), K = 256*kh + kl + 128 (signed lo plane):
     // S = 65536*hh + 256*(qh.kl + qlu.kh) + qlu.kl + 128*sum_d Q_d, and 128*sum_d Q_d = 32768*qhs + 128*qls + 2^20 (qls is the signed-plane sum).
     for (int i = tid; i < TQ; i += NTHR) { size_t rq = rowBase + i; S.cq[i] = int(32768LL * qhs[rq] + 128LL * qls[rq]) + (1 << 20); S.eq[i] = eq[rq]; }
-    if (PASS >= 1) for (int i = tid; i < 1024; i += NTHR) S.lexp2[i] = make_int2(int(Lexp[i]), int(Lexp[i + 1]) - int(Lexp[i]));
+    if constexpr (PASS == 1 && CompactP1) {
+        for (int i = tid; i < 1025; i += NTHR) reinterpret_cast<int32_t*>(S.lexp2)[i] = int(Lexp[i]);
+    } else if (PASS >= 1) {
+        for (int i = tid; i < 1024; i += NTHR) S.lexp2[i] = make_int2(int(Lexp[i]), int(Lexp[i + 1]) - int(Lexp[i]));
+    }
     if (PASS == 2) for (int i = tid; i < 64; i += NTHR) S.u.p2.vev[i] = ev[g * 64 + i];
     uint32_t qa_hi[2][4], qa_lo[2][4];
     {
@@ -198,6 +216,13 @@ __global__ void __launch_bounds__(NTHR, (TQ == 64 ? (PASS == 2 ? 2 : 3) : 1)) at
 #else
         constexpr int NU = 2;
 #endif
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 860
+        auto scoreBlock = [&](auto tag) {
+            constexpr int scoreClass = decltype(tag)::value;
+#else
+        {
+            const int scoreClass = cls;
+#endif
         for (int np = 0; np < 4 / NU; ++np) {
             int32_t hh[NU][4], hl[NU][4], ll[NU][4];
             #pragma unroll
@@ -224,19 +249,23 @@ __global__ void __launch_bounds__(NTHR, (TQ == 64 ? (PASS == 2 ? 2 : 3) : 1)) at
                     const int kc = j & 1, key = key0 + kc; const bool r1 = j >= 2;
                     const int T = (hl[u][j] << 8) + ll[u][j] + (r1 ? cq1 : cq0);
                     const bool valid = fullTile || (key < Tk && !(causal && key > (r1 ? qrow1 : qrow0)));
-                    const int sv = valid ? score_u(hh[u][j], T, 19 - (r1 ? eq1 : eq0) - ekk[kc], cls) : INT_MIN;
+                    const int sv = valid ? score_u(hh[u][j], T, 19 - (r1 ? eq1 : eq0) - ekk[kc], scoreClass) : INT_MIN;
                     if (PASS == 0) { if (r1) mx1 = max(mx1, sv); else mx0 = max(mx0, sv); }
                     else {
                         const unsigned z = valid ? unsigned(r1 ? mxr1 : mxr0) - unsigned(sv) : 0xffffffffu;
-                        const int E = lutexp32(z, S.lexp2);
+                        const int E = (PASS == 1 && CompactP1) ? lutexp32(z, reinterpret_cast<int32_t*>(S.lexp2)) : lutexp32(z, S.lexp2);
                         if (PASS == 1) { if (r1) es1 += unsigned(E); else es0 += unsigned(E); }
                         else {
                             const unsigned rlo = r1 ? r1lo : r0lo, rhi = r1 ? r1hi : r0hi;
                             // P = (E*r + 2^46) >> 47. r = floor(2^62 / sumE) and sumE >= max E, so normally r < 2^33 (rhi <= 1): the low word of
                             // E*r never reaches bit 46, hence P = (hi32(E*rlo) + E*rhi + 2^14) >> 15 in 32-bit arithmetic (E <= 2^30, no overflow).
                             unsigned Pp;
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 860
+                            Pp = probability_round(unsigned(E), rlo, rhi);
+#else
                             if (rhi <= 1u) { const unsigned hi = __umulhi(unsigned(E), rlo) + unsigned(E) * rhi; Pp = (hi + (1u << 14)) >> 15; }
                             else { unsigned long long prod = (unsigned long long)unsigned(E) * rlo + ((unsigned long long)(unsigned(E) * rhi) << 32); Pp = unsigned((prod + (1ull << 46)) >> 47); }
+#endif
                             const int P = Pp > 32767u ? 32767 : int(Pp);
                             ph[j] = P >> 8; pl[j] = P & 255;                     // both planes unsigned: P = 256*ph + pl
                             if (r1) { phs_t1 += ph[j]; pls_t1 += pl[j]; } else { phs_t0 += ph[j]; pls_t0 += pl[j]; }
@@ -255,6 +284,15 @@ __global__ void __launch_bounds__(NTHR, (TQ == 64 ? (PASS == 2 ? 2 : 3) : 1)) at
                 }
             }
         }
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 860
+        };
+        if (cls == 0) scoreBlock(std::integral_constant<int, 0>{});
+        else if (cls == 1) scoreBlock(std::integral_constant<int, 1>{});
+        else if (cls == 2) scoreBlock(std::integral_constant<int, 2>{});
+        else scoreBlock(std::integral_constant<int, 3>{});
+#else
+        }
+#endif
         if (PASS == 2) {
             // this warp wrote P for rows rw*16.. and keys kh*32..+31 of the tile: publish whether any P >= 256 there
             if (__any_sync(0xffffffffu, anyHi)) { if (lane == 0) S.u.p2.pflag[rw][kh] = 1; } else if (lane == 0) S.u.p2.pflag[rw][kh] = 0;
@@ -481,8 +519,12 @@ __global__ void __launch_bounds__(NTHR, 2) attn_small_k(
                 const int E = lutexp32(z, S.lexp);
                 const unsigned rlo = r1 ? r1lo : r0lo, rhi = r1 ? r1hi : r0hi;
                 unsigned Pp;
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 860
+                Pp = probability_round(unsigned(E), rlo, rhi);
+#else
                 if (rhi <= 1u) { const unsigned hi = __umulhi(unsigned(E), rlo) + unsigned(E) * rhi; Pp = (hi + (1u << 14)) >> 15; }
                 else { unsigned long long prod = (unsigned long long)unsigned(E) * rlo + ((unsigned long long)(unsigned(E) * rhi) << 32); Pp = unsigned((prod + (1ull << 46)) >> 47); }
+#endif
                 const int P = Pp > 32767u ? 32767 : int(Pp);
                 ph[j] = P >> 8; pl[j] = P & 255;
                 if (r1) { phs1 += ph[j]; pls1 += pl[j]; } else { phs0 += ph[j]; pls0 += pl[j]; }
@@ -546,6 +588,8 @@ constexpr size_t SMEMS = sizeof(SmemS);
 #define MEOW_ATTN_SMALL 1
 #endif
 constexpr size_t SMEM0 = offsetof(Smem, lexp2), SMEM1 = offsetof(Smem, u), SMEM2 = sizeof(Smem);
+// CompactP1 is part of the kernel identity, so its allocation remains valid
+// even when an Ampere device runs a binary built for a lower CUDA target.
 }  // namespace
 
 void k_fused_attention(cudaStream_t st, const int8_t* qhi, const int8_t* qlo, const int32_t* eq, const i64* qhs, const i64* qls,
@@ -558,16 +602,20 @@ void k_fused_attention(cudaStream_t st, const int8_t* qhi, const int8_t* qlo, co
     // the same thread switches devices (e.g. checking several GPUs in order).
     static thread_local int attrDevice = -1;
     static thread_local bool specializeUnmasked = false;
+    static thread_local bool compactPass1 = false;
     int device = -1;
     CUDA_CHECK(cudaGetDevice(&device));
     if (attrDevice != device) {
         cudaDeviceProp prop{};
         CUDA_CHECK(cudaGetDeviceProperties(&prop, device));
-        specializeUnmasked = (prop.major == 8 && prop.minor == 9) || prop.major == 12;
+        specializeUnmasked = (prop.major == 8 && (prop.minor == 6 || prop.minor == 9)) || prop.major == 12;
+        compactPass1 = prop.major == 8 && prop.minor == 6;
         CUDA_CHECK(cudaFuncSetAttribute(attn_pass_k<0, false>, cudaFuncAttributeMaxDynamicSharedMemorySize, int(SMEM0)));
         CUDA_CHECK(cudaFuncSetAttribute(attn_pass_k<0, true>, cudaFuncAttributeMaxDynamicSharedMemorySize, int(SMEM0)));
         CUDA_CHECK(cudaFuncSetAttribute(attn_pass_k<1, false>, cudaFuncAttributeMaxDynamicSharedMemorySize, int(SMEM1)));
         CUDA_CHECK(cudaFuncSetAttribute(attn_pass_k<1, true>, cudaFuncAttributeMaxDynamicSharedMemorySize, int(SMEM1)));
+        CUDA_CHECK(cudaFuncSetAttribute(attn_pass_k<1, false, true>, cudaFuncAttributeMaxDynamicSharedMemorySize, int(SMEM0 + 4112)));
+        CUDA_CHECK(cudaFuncSetAttribute(attn_pass_k<1, true, true>, cudaFuncAttributeMaxDynamicSharedMemorySize, int(SMEM0 + 4112)));
         CUDA_CHECK(cudaFuncSetAttribute(attn_pass_k<2, false>, cudaFuncAttributeMaxDynamicSharedMemorySize, int(SMEM2)));
         CUDA_CHECK(cudaFuncSetAttribute(attn_pass_k<2, true>, cudaFuncAttributeMaxDynamicSharedMemorySize, int(SMEM2)));
         attrDevice = device;
@@ -590,11 +638,13 @@ void k_fused_attention(cudaStream_t st, const int8_t* qhi, const int8_t* qlo, co
     // element masking only when the entire padded key domain is valid.
     if (specializeUnmasked && !causal && Tk == Tkp) {
         attn_pass_k<0, true><<<grid, NTHR, SMEM0, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
-        attn_pass_k<1, true><<<grid, NTHR, SMEM1, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
+        if (compactPass1) attn_pass_k<1, true, true><<<grid, NTHR, SMEM0 + 4112, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
+        else attn_pass_k<1, true><<<grid, NTHR, SMEM1, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
         attn_pass_k<2, true><<<grid, NTHR, SMEM2, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
     } else {
         attn_pass_k<0, false><<<grid, NTHR, SMEM0, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
-        attn_pass_k<1, false><<<grid, NTHR, SMEM1, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
+        if (compactPass1) attn_pass_k<1, false, true><<<grid, NTHR, SMEM0 + 4112, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
+        else attn_pass_k<1, false><<<grid, NTHR, SMEM1, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
         attn_pass_k<2, false><<<grid, NTHR, SMEM2, st>>>(qhi, qlo, eq, qhs, qls, khi, klo, ek, ksum, vthi, vtlo, ev, vsum, Tq, Tqp, Tk, Tkp, causal, Lexp, heads, C, gmx, gr, out, rowmax);
     }
 }
