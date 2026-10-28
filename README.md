@@ -32,10 +32,10 @@ components and models keep their own licenses.
 > **HiveOS / MMPOS / SMOS: works on older images since 0.1.8.** Linux packages up to 0.1.7 needed glibc 2.38 and
 > stopped with `version 'GLIBC_2.36' not found` / `'GLIBC_2.38' not found` on most mining OS images. From 0.1.8 the
 > Linux build runs on **Ubuntu 20.04 up to the latest release** (glibc 2.31+, OpenSSL built in), and the model
-> downloads automatically from suprnova.cc or Hugging Face. Update the custom miner to 0.1.10.
+> downloads automatically from suprnova.cc or Hugging Face. Update the custom miner to 0.1.11.
 
-* `supr-meow-vela-0.1.10.tar.gz` — Linux x86-64 + bundled CUDA 13.3 runtime. One tarball serves **HiveOS** (`h-run.sh`), **MMPOS** (`mmpos-run.sh`) and **SMOS** (`smos-run.sh`) — extracts into `supr-meow-vela/`. For HiveOS use the [custom-miner setup instructions](docs/hiveos.md); for MMPOS/SMOS set `POOL_URL` and `WALLET` for the matching launcher. The model downloads automatically if it is not cached.
-* `supr-meow-vela-0.1.10-windows-x86_64.zip` — native **Windows** x64 build (no WSL/Docker). Edit `start.cmd` with your wallet and run it; the model downloads on first start. No TLS on Windows — use the plain-TCP port.
+* `supr-meow-vela-0.1.11.tar.gz` — Linux x86-64 + bundled CUDA 13.3 runtime. One tarball serves **HiveOS** (`h-run.sh`), **MMPOS** (`mmpos-run.sh`) and **SMOS** (`smos-run.sh`) — extracts into `supr-meow-vela/`. For HiveOS use the [custom-miner setup instructions](docs/hiveos.md); for MMPOS/SMOS set `POOL_URL` and `WALLET` for the matching launcher. The model downloads automatically if it is not cached.
+* `supr-meow-vela-0.1.11-windows-x86_64.zip` — native **Windows** x64 build (no WSL/Docker). Edit `start.cmd` with your wallet and run it; the model downloads on first start. No TLS on Windows — use the plain-TCP port.
 * `sd-turbo-int.poisd` — the model (~1.2 GB), plus `SHA256SUMS`.
 
 The model's primary URL is `https://vela.suprnova.cc/dl/sd-turbo-int.poisd`;
@@ -57,7 +57,7 @@ can override the expected checksum for an explicitly selected model.
 
 ## HiveOS
 
-Use the **versioned** `supr-meow-vela-0.1.10.tar.gz` installation URL and the custom miner name **`supr-meow-vela`**. See [flight sheet fields, upgrade steps and troubleshooting](docs/hiveos.md). From 0.1.10 the model cache is `/hive/models/supr-meow-vela`, outside the configuration partition.
+Use the **versioned** `supr-meow-vela-0.1.11.tar.gz` installation URL and the custom miner name **`supr-meow-vela`**. See [flight sheet fields, upgrade steps and troubleshooting](docs/hiveos.md). From 0.1.10 the model cache is `/hive/models/supr-meow-vela`, outside the configuration partition.
 
 ## Usage
 ```
@@ -74,7 +74,7 @@ The [fleet benchmark sheet](docs/benchmarks-2026-10-27.md) and
 [CSV spreadsheet](docs/benchmarks-2026-10-27.csv) list GPU architecture, measured
 power draw, throughput and efficiency. See [0.1.9 release notes](RELEASE-v0.1.9.md).
 
-Version **0.1.10** fixes HiveOS installation and monitoring; its CUDA kernels are unchanged from 0.1.9. The benchmark table above records the earlier measurements, not a new performance claim.
+Package **0.1.11** fixes HiveOS launcher compatibility with older curl and displays the installed package version in Hive. It repackages the unchanged **0.1.10 binaries**; the miner banner still shows 0.1.10. The benchmark table above records the earlier measurements, not a new performance claim.
 
 ## Monitoring
 

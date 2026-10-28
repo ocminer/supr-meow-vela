@@ -1,6 +1,6 @@
 # HiveOS custom-miner setup
 
-Use v0.1.10 or later for the installation and monitoring fixes. The package
+Use v0.1.11 or later for the installation and monitoring fixes. The package
 requires an NVIDIA GPU supported by the miner, a CUDA 13 compatible driver
 (R580 or newer), and an Ubuntu 20.04 or newer HiveOS image. Allow about **3 GB
 of free space on the root filesystem** for the download, extracted runtime
@@ -13,7 +13,7 @@ Choose **Custom** as the miner, then fill its configuration as follows:
 | Field | Value |
 |---|---|
 | Custom miner name | `supr-meow-vela` |
-| Installation URL | `https://github.com/ocminer/supr-meow-vela/releases/download/v0.1.10/supr-meow-vela-0.1.10.tar.gz` |
+| Installation URL | `https://github.com/ocminer/supr-meow-vela/releases/download/v0.1.11/supr-meow-vela-0.1.11.tar.gz` |
 | Hash algorithm | `vela-poi` (use the custom algorithm field if it is not listed) |
 | Wallet and worker template | `%WAL%.%WORKER_NAME%` |
 | Pool URL | `vela.suprnova.cc:7601` |
@@ -44,14 +44,20 @@ required top-level `supr-meow-vela/` directory and executable Hive callbacks.
 The legacy `supr-meow-vela-hiveos.tar.gz` alias is still provided, but Hive may
 reuse a previously downloaded archive with that same name after an upgrade.
 
-If Hive has cached an older custom-miner installation, stop the miner, update
-the flight sheet, and force-install the versioned package from a Hive shell:
+Update **both version numbers** in the flight sheet installation URL to
+**0.1.11**, save it, then force-install that same package from a Hive shell.
+Keeping an old URL can cause Hive to reinstall the older launcher:
 
 ```bash
 miner stop
-/hive/miners/custom/custom-get https://github.com/ocminer/supr-meow-vela/releases/download/v0.1.10/supr-meow-vela-0.1.10.tar.gz -f
+/hive/miners/custom/custom-get https://github.com/ocminer/supr-meow-vela/releases/download/v0.1.11/supr-meow-vela-0.1.11.tar.gz -f
 miner start
 ```
+
+The first launcher line must show `[supr-meow-vela] HiveOS package 0.1.11`.
+The native executable still reports **0.1.10**: this release intentionally
+reuses the existing binaries. Hive displays the **package version**, including
+while the model is downloading.
 
 The default model cache is **`/hive/models/supr-meow-vela`**, outside the small
 `/hive-config` configuration partition and outside the miner installation
@@ -88,7 +94,8 @@ Selected/reordered GPUs are mapped by their actual CUDA PCI bus numbers.
 Unavailable fan readings remain null. Missing, dead-process or stale stats
 report zero instead of retaining an old hashrate.
 
-- **Missing `h-manifest.conf` after install:** use the versioned v0.1.10 package and force-reinstall it. The generic archive layout in older releases was unsuitable for Hive's installer.
+- **`curl: option --no-progress-meter: is unknown`:** the packaged launcher does not pass this option and works with curl 7.58. Update the flight-sheet URL and force-reinstall as above; no curl upgrade is needed for this fix. Check the package banner to confirm which launcher actually runs.
+- **Missing `h-manifest.conf` after install:** use the versioned v0.1.11 package and force-reinstall it. The generic archive layout in older releases was unsuitable for Hive's installer.
 - **Not enough free space:** check `df -h / /hive/models/supr-meow-vela` and set `MODEL_DIR` to a filesystem with room. Installing on a large SSD does not itself guarantee that the mounted partition has free space.
 - **CUDA driver error / no CUDA devices:** check `nvidia-smi` and the installed driver; the package includes CUDA runtime libraries, not a kernel driver.
 - **Zero rate immediately after starting:** allow the model to load and the first mining interval to complete, then check the log for a pool or CUDA error.

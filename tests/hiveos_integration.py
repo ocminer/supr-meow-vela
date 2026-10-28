@@ -87,7 +87,7 @@ class HiveIntegration(unittest.TestCase):
         data = self.stats()
         self.assertAlmostEqual(float(data['khs']), .0807)
         self.assertEqual(data['stats'], {'hs':[52.3,28.4], 'hs_units':'hs', 'temp':[62,71],
-            'fan':[None,80], 'bus_numbers':[10,3], 'uptime':1234, 'ver':'0.1.10',
+            'fan':[None,80], 'bus_numbers':[10,3], 'uptime':1234, 'ver':'0.1.11',
             'ar':[12,3], 'algo':'vela-poi'})
 
     def test_eight_gpu_snapshot_is_complete(self):
@@ -99,7 +99,9 @@ class HiveIntegration(unittest.TestCase):
 
     def test_missing_stats_is_zero(self):
         data = self.stats()
-        self.assertEqual((data['khs'], data['stats']), ('0', None))
+        self.assertEqual(data['khs'], '0')
+        self.assertEqual(data['stats']['hs'], [])
+        self.assertEqual(data['stats']['ver'], '0.1.11')
 
     def test_stale_future_dead_or_incomplete_stats_is_zero(self):
         for change in [{'timestamp':int(time.time())-61}, {'timestamp':int(time.time())+20},
@@ -107,12 +109,14 @@ class HiveIntegration(unittest.TestCase):
             with self.subTest(change=change):
                 self.snapshot(**change)
                 data = self.stats()
-                self.assertEqual((data['khs'],data['stats']), ('0',None))
+                self.assertEqual(data['khs'], '0')
+                self.assertEqual(data['stats']['hs'], [])
+                self.assertEqual(data['stats']['ver'], '0.1.11')
 
     def test_bad_json_and_unavailable_telemetry_do_not_break_agent(self):
         self.snapshot()
         self.statsfile.write_text('{"incomplete":')
-        self.assertIsNone(self.stats()['stats'])
+        self.assertEqual(self.stats()['stats']['hs'], [])
         self.snapshot(devices=[{'index':0,'inf_s':28.4,'temp':None,'fan':None,'bus_number':None}])
         self.assertEqual(self.stats()['stats']['fan'], [None])
 
@@ -148,6 +152,7 @@ class HiveIntegration(unittest.TestCase):
         self.assertFalse(self.logbase.parent.exists())
         result = self.launch()
         self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('HiveOS package 0.1.11', result.stdout)
         self.assertTrue(self.logbase.with_suffix('.log').exists())
         args = json.loads(next(line[5:] for line in result.stdout.splitlines() if line.startswith('ARGS=')))
         self.assertIn('--tls',args)

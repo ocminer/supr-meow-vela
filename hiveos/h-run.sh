@@ -2,6 +2,7 @@
 # Launch supr-meow-vela. cwd is the package directory; HiveOS captures stdout.
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")" || exit 1
 . h-manifest.conf
+echo "[supr-meow-vela] HiveOS package ${CUSTOM_VERSION}"
 if [[ -f $CUSTOM_CONFIG_FILENAME ]]; then
   . "$CUSTOM_CONFIG_FILENAME" || exit 1
 fi
@@ -51,8 +52,8 @@ if [[ -z $MODEL_PATH ]]; then
     trap 'rm -f -- "$part"' EXIT
     for url in "${urls[@]}"; do
       echo "[supr-meow-vela] downloading model (1.2 GB, one time): $url"
-      if curl -fL --retry 2 --retry-delay 2 --connect-timeout 15 \
-          --speed-time 60 --speed-limit 1024 -sS -o "$part" "$url" && \
+      if command curl -q -fL -sS --retry 2 --retry-delay 2 --connect-timeout 15 \
+          --speed-time 60 --speed-limit 1024 -o "$part" "$url" && \
           [[ -s $part ]] && echo "${MODEL_SHA256}  ${part}" | sha256sum -c -; then
         mv -- "$part" "$MODEL_PATH" || exit 1
         break

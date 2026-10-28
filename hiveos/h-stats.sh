@@ -9,6 +9,9 @@ _vela_hive_stats() {
   local CUSTOM_NAME CUSTOM_VERSION CUSTOM_LOG_BASENAME CUSTOM_CONFIG_FILENAME CUSTOM_STATS_FILENAME
   package_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || return 0
   . "$package_dir/h-manifest.conf" || return 0
+  # Keep the installed package visible while its model downloads or loads.
+  stats=$(jq -nc --arg ver "$CUSTOM_VERSION" '{hs:[], hs_units:"hs", temp:[], fan:[],
+    bus_numbers:[], uptime:0, ver:$ver, ar:[0,0], algo:"vela-poi"}') || return 0
   [[ -r $CUSTOM_STATS_FILENAME ]] || return 0
   snapshot=$(cat -- "$CUSTOM_STATS_FILENAME" 2>/dev/null) || return 0
   pid=$(jq -er '.pid | select(type == "number" and . > 0 and . == floor)' <<< "$snapshot" 2>/dev/null) || return 0
@@ -16,7 +19,7 @@ _vela_hive_stats() {
   # Reject incomplete, stopped or stale snapshots instead of retaining a rate
   # from a previous run. CUDA supplies the PCI mapping, including --devices and
   # CUDA_VISIBLE_DEVICES; no second nvidia-smi query or guessed GPU index needed.
-  result=$(jq -ce --argjson now "$(date +%s)" '
+  result=$(jq -ce --arg ver "$CUSTOM_VERSION" --argjson now "$(date +%s)" '
     def nonnegative: type == "number" and . >= 0;
     select(.schema == 1 and (.timestamp | nonnegative) and
            .timestamp <= ($now + 5) and .timestamp >= ($now - 60) and
@@ -29,7 +32,7 @@ _vela_hive_stats() {
            (.shares.accepted | nonnegative) and (.shares.rejected | nonnegative) and (.shares.stale | nonnegative)) |
     {hs: [.devices[].inf_s], hs_units: "hs", temp: [.devices[].temp],
      fan: [.devices[].fan], bus_numbers: [.devices[].bus_number],
-     uptime: .uptime, ver: .version, ar: [.shares.accepted, (.shares.rejected + .shares.stale)], algo: "vela-poi"}
+     uptime: .uptime, ver: $ver, ar: [.shares.accepted, (.shares.rejected + .shares.stale)], algo: "vela-poi"}
   ' <<< "$snapshot" 2>/dev/null) || return 0
   khs=$(jq -r '(.hs | add) / 1000' <<< "$result") || { khs=0; return 0; }
   stats=$result

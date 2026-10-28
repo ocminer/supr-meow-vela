@@ -105,7 +105,7 @@ jobs:
       - name: Upload native package
         uses: actions/upload-artifact@v4
         with:
-          name: supr-meow-vela-0.1.10-windows-x86_64
+          name: supr-meow-vela-0.1.11-windows-x86_64
           path: dist/*
           if-no-files-found: error
       - name: Upload diagnostics

@@ -4,7 +4,7 @@
 # Run on the build host after `cmake --build <build-dir>`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VER=${1:-0.1.10}
+VER=${1:-0.1.11}
 BUILD=${BUILD_DIR:-build-release}
 CUDA=${CUDA_HOME:-/usr/local/cuda-13.3}
 D=dist/supr-meow-vela
@@ -18,7 +18,7 @@ mkdir -p "$D/licenses" "$D/docs"
 cp licenses/*.txt "$D/licenses/"
 cp docs/benchmarks-2026-10-27.md docs/benchmarks-2026-10-27.csv docs/hiveos.md "$D/docs/"
 cp "$CUDA/EULA.txt" "$D/licenses/NVIDIA-CUDA-EULA.txt"
-printf '{"version":"%s","source_commit":"%s","cuda":"13.3","architectures":[80,86,89,90,100,120]}\n' \
+printf '{"version":"%s","binary_version":"0.1.10","source_commit":"%s","cuda":"13.3","architectures":[80,86,89,90,100,120]}\n' \
   "$VER" "$(git rev-parse HEAD)" > "$D/BUILD-INFO.json"
 # HiveOS
 cp hiveos/h-config.sh hiveos/h-run.sh hiveos/h-stats.sh hiveos/h-manifest.conf "$D/"
