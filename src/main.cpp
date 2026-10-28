@@ -6,12 +6,14 @@
 #include "stratum.h"
 #include "httpd.h"
 #include "device.h"
+#include "miner_stats.h"
 #include <cuda_profiler_api.h>
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstring>
+#include <ctime>
 #include <exception>
 #include <mutex>
 #include <random>
@@ -22,7 +24,7 @@
 
 using namespace meow;
 using json = nlohmann::json;
-static const char* VERSION_STR = "0.1.9";
+static const char* VERSION_STR = "0.1.10";
 static std::atomic<bool> g_stop{false};
 static std::atomic<bool> g_minerFailed{false};
 static std::mutex g_logmu;
@@ -35,7 +37,7 @@ struct Opts {
     std::string model = "sd-turbo-int.poisd", url, wallet, password = "x", host = "0.0.0.0";
     std::vector<int> devices; int batch = 4; int lanes = 2; bool tls = false; bool graph = true;
     bool fusedAttn = true; bool testAttn = false; int gemmMaxK = 1536; bool fusedLoader = true; bool gnFuse = false; bool check = false, bench = false, verifyServer = false; int benchIters = 20; int port = 9010; size_t memMB = 0; size_t scoreMB = 256;
-    std::string seedHex, headerHex, tokensStr, x0Out; double suggestDiff = 0; int threads = 4;
+    std::string seedHex, headerHex, tokensStr, x0Out, statsFile; double suggestDiff = 0; int threads = 4;
 };
 static void usage() {
     std::cout << "supr-meow-vela " << VERSION_STR << " — Vela PoI v2 GPU miner\n"
@@ -50,6 +52,7 @@ static void usage() {
         "      --mem MB             arena per lane (default: auto)\n"
         "      --score-mb MB        attention score budget per lane (default 256)\n"
         "      --suggest-diff D     send mining.suggest_difficulty after connect\n"
+        "      --stats-file FILE    atomic JSON mining stats (updated every 10s)\n"
         "      --no-graph           run eagerly (debug)\n"
         "      --check              verify the spec test vector on every selected GPU\n"
         "      --bench [N]          throughput benchmark\n"
@@ -63,6 +66,7 @@ static Opts parse(int argc, char** argv) {
         std::string a = argv[i]; auto next = [&]() -> std::string { if (i + 1 >= argc) throw std::runtime_error("missing value for " + a); return argv[++i]; };
         if (a == "-o" || a == "--url") o.url = next(); else if (a == "-u" || a == "--user") o.wallet = next(); else if (a == "-p" || a == "--pass") o.password = next();
         else if (a == "--tls") o.tls = true; else if (a == "--model") o.model = next(); else if (a == "--devices") o.devices = parseInts(next());
+        else if (a == "--stats-file") o.statsFile = next();
         else if (a == "--batch") o.batch = std::stoi(next()); else if (a == "--lanes") o.lanes = std::stoi(next()); else if (a == "--mem") o.memMB = std::stoul(next());
         else if (a == "--score-mb") o.scoreMB = std::stoul(next()); else if (a == "--suggest-diff") o.suggestDiff = std::stod(next()); else if (a == "--no-graph") o.graph = false; else if (a == "--attn-cublas") o.fusedAttn = false; else if (a == "--test-attn") o.testAttn = true; else if (a == "--gemm-maxk") o.gemmMaxK = std::stoi(next()); else if (a == "--no-fused-loader") o.fusedLoader = false; else if (a == "--gn-fuse") o.gnFuse = true;
         else if (a == "--check") o.check = true; else if (a == "--bench") { o.bench = true; if (i + 1 < argc && argv[i + 1][0] != '-') o.benchIters = std::stoi(argv[++i]); }
@@ -277,6 +281,11 @@ static void mineLane(const Opts& o, const DevModel& dm, EngineConfig cfg, Stratu
 }
 static int runMiner(const Opts& o, const Poisd& model, const std::vector<int>& devs) {
     if (o.url.empty() || o.wallet.empty()) { usage(); return 1; }
+    MinerStatsFile statsFile(o.statsFile);
+    json snapshot = {{"schema", 1}, {"pid", MinerStatsFile::pid()}, {"version", VERSION_STR},
+                     {"timestamp", std::time(nullptr)}, {"uptime", 0}, {"total_inf_s", 0},
+                     {"shares", {{"accepted", 0}, {"rejected", 0}, {"stale", 0}}}, {"devices", json::array()}};
+    if (!statsFile.write(snapshot)) { logln("Cannot write --stats-file " + o.statsFile); return 1; }
     std::string host = o.url; int port = 7601; size_t c = host.rfind(':'); if (c != std::string::npos) { port = std::stoi(host.substr(c + 1)); host = host.substr(0, c); }
     if (host.rfind("stratum+tcp://", 0) == 0) host = host.substr(14); if (host.rfind("stratum+ssl://", 0) == 0) host = host.substr(14);
     StratumClient client(host, port, o.tls, o.wallet, o.password, std::string("supr-meow-vela/") + VERSION_STR);
@@ -301,22 +310,41 @@ static int runMiner(const Opts& o, const Poisd& model, const std::vector<int>& d
     }
     // stats reporter
     uint64_t lastTot = 0; auto lastT = std::chrono::steady_clock::now(); auto start = lastT;
+    std::vector<uint64_t> lastDev(devs.size(), 0);
+    bool statsWriteFailed = false;
     while (!g_stop) {
         for (int i = 0; i < 100 && !g_stop; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(100));
         auto now = std::chrono::steady_clock::now(); double dt = std::chrono::duration<double>(now - lastT).count(); lastT = now;
         uint64_t tot = 0; std::string per; size_t si = 0; double best = 0;
+        json devices = json::array();
         for (size_t di = 0; di < devs.size(); ++di) {
             uint64_t dsum = 0; for (int l = 0; l < o.lanes; ++l, ++si) { dsum += stats[si]->inferences; best = std::max(best, stats[si]->bestDiff.load()); }
-            static std::vector<uint64_t> lastDev; if (lastDev.size() < devs.size()) lastDev.resize(devs.size(), 0);
             double r = (dsum - lastDev[di]) / dt; lastDev[di] = dsum; tot += dsum;
             GpuTelemetry t = gpuTelemetry(devs[di]);
+            if (statsFile.enabled()) {
+                auto available = [](int value) -> json { return value < 0 ? json(nullptr) : json(value); };
+                devices.push_back({{"index", devs[di]}, {"pci_bus_id", t.pciBusId}, {"bus_number", available(t.busNumber)},
+                                   {"inf_s", r}, {"temp", available(t.tempC)}, {"fan", available(t.fan)}, {"power_w", available(t.powerW)}});
+            }
             char b[160]; std::snprintf(b, sizeof(b), " GPU%d %.1f inf/s%s%s", devs[di], r, t.tempC >= 0 ? (" " + std::to_string(t.tempC) + "C").c_str() : "", t.powerW >= 0 ? (" " + std::to_string(t.powerW) + "W").c_str() : "");
             per += b;
         }
         double rate = (tot - lastTot) / dt; lastTot = tot;
         double up = std::chrono::duration<double>(now - start).count();
-        char line[256]; std::snprintf(line, sizeof(line), "speed %.1f inf/s |%s | shares A%llu R%llu S%llu | best %.0f | up %.0fm", rate, per.c_str(), (unsigned long long)client.stats.accepted.load(), (unsigned long long)client.stats.rejected.load(), (unsigned long long)client.stats.stale.load(), best, up / 60);
-        logln(line);
+        const auto accepted = client.stats.accepted.load(), rejected = client.stats.rejected.load(), stale = client.stats.stale.load();
+        std::ostringstream line;
+        line << std::fixed << std::setprecision(1) << "speed " << rate << " inf/s |" << per
+             << " | shares A" << accepted << " R" << rejected << " S" << stale
+             << " | best " << std::setprecision(0) << best << " | up " << up / 60 << "m";
+        logln(line.str());
+        if (statsFile.enabled()) {
+            snapshot["timestamp"] = std::time(nullptr); snapshot["uptime"] = uint64_t(up);
+            snapshot["total_inf_s"] = rate; snapshot["devices"] = std::move(devices);
+            snapshot["shares"] = {{"accepted", accepted}, {"rejected", rejected}, {"stale", stale}};
+            bool failed = !statsFile.write(snapshot);
+            if (failed && !statsWriteFailed) logln("Cannot update --stats-file " + o.statsFile);
+            statsWriteFailed = failed;
+        }
     }
     client.stop();
     for (auto& t : ths) t.join();

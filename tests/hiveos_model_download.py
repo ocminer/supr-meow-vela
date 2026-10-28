@@ -160,6 +160,16 @@ class DownloadTests(unittest.TestCase):
         self.launch(MODEL_FALLBACK_URL=self.base+'/custom '+self.base+'/hf')
         self.assertEqual(self.requests, ['/primary', '/custom', '/hf'])
 
+    def test_hive_low_disk_space_stops_before_download(self):
+        if self.LAUNCHER != 'hiveos/h-run.sh':
+            self.skipTest('HiveOS model-cache space check')
+        df = self.root/'bin/df'
+        df.write_text('#!/bin/sh\nprintf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 1000 999 1 100%% /fixture\\n"\n')
+        df.chmod(0o755)
+        result = self.launch(success=False)
+        self.assertIn('not enough free space', result.stdout)
+        self.assertEqual(self.requests, [])
+
     def test_empty_fallback_disables_mirror(self):
         self.routes['/primary'] = None
         self.launch(success=False, MODEL_FALLBACK_URL='')

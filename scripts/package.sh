@@ -4,10 +4,10 @@
 # Run on the build host after `cmake --build <build-dir>`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VER=${1:-0.1.9}
+VER=${1:-0.1.10}
 BUILD=${BUILD_DIR:-build-release}
 CUDA=${CUDA_HOME:-/usr/local/cuda-13.3}
-D=dist/supr-meow-vela-$VER
+D=dist/supr-meow-vela
 rm -rf "$D"; mkdir -p "$D/lib"
 
 cp "$BUILD/supr-meow-vela" "$D/"; strip "$D/supr-meow-vela"
@@ -16,7 +16,7 @@ cp README.md LICENSE NOTICE "$D/"
 cp RELEASE-v"$VER".md "$D/"
 mkdir -p "$D/licenses" "$D/docs"
 cp licenses/*.txt "$D/licenses/"
-cp docs/benchmarks-2026-10-27.md docs/benchmarks-2026-10-27.csv "$D/docs/"
+cp docs/benchmarks-2026-10-27.md docs/benchmarks-2026-10-27.csv docs/hiveos.md "$D/docs/"
 cp "$CUDA/EULA.txt" "$D/licenses/NVIDIA-CUDA-EULA.txt"
 printf '{"version":"%s","source_commit":"%s","cuda":"13.3","architectures":[80,86,89,90,100,120]}\n' \
   "$VER" "$(git rev-parse HEAD)" > "$D/BUILD-INFO.json"
@@ -30,12 +30,12 @@ chmod +x "$D"/*.sh "$D/supr-meow-vela"
 ( cd "$D" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt )
 
 # One tarball for all Linux mining OSes
-( cd dist && tar czf "supr-meow-vela-$VER.tar.gz" "supr-meow-vela-$VER" \
+( cd dist && tar czf "supr-meow-vela-$VER.tar.gz" supr-meow-vela \
     && sha256sum "supr-meow-vela-$VER.tar.gz" > "supr-meow-vela-$VER.tar.gz.sha256" )
 
-# HiveOS also accepts a package dir named after the miner
-( cd dist && rm -rf supr-meow-vela && cp -r "supr-meow-vela-$VER" supr-meow-vela \
-    && tar czf supr-meow-vela-hiveos.tar.gz supr-meow-vela && rm -rf supr-meow-vela \
+# Legacy download alias; prefer the versioned URL above so Hive's installer
+# cannot reuse an older archive with the same basename during an upgrade.
+( cd dist && cp "supr-meow-vela-$VER.tar.gz" supr-meow-vela-hiveos.tar.gz \
     && sha256sum supr-meow-vela-hiveos.tar.gz > supr-meow-vela-hiveos.tar.gz.sha256 )
 
 echo "== dist =="; ls -la dist/ | grep -E "$VER|hiveos"

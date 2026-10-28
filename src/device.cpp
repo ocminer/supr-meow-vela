@@ -2,6 +2,7 @@
 #include "common.h"
 #include "compat.h"
 #include <mutex>
+#include <cstdio>
 
 namespace meow {
 std::vector<GpuInfo> listGpus() {
@@ -27,8 +28,12 @@ Nvml& nvml() {
 }
 }  // namespace
 GpuTelemetry gpuTelemetry(int idx) {
-    GpuTelemetry t; Nvml& n = nvml(); if (!n.ok) return t;
+    GpuTelemetry t;
     char pci[32]; if (cudaDeviceGetPCIBusId(pci, sizeof(pci), idx) != cudaSuccess) return t;
+    t.pciBusId = pci;
+    unsigned domain = 0, bus = 0;
+    if (std::sscanf(pci, "%x:%x", &domain, &bus) == 2 && bus <= 255) t.busNumber = int(bus);
+    Nvml& n = nvml(); if (!n.ok) return t;
     void* dev = nullptr; if (n.byPci(pci, &dev) != 0) return t;
     unsigned v = 0; if (n.temp(dev, 0, &v) == 0) t.tempC = int(v);
     if (n.power(dev, &v) == 0) t.powerW = int(v / 1000);

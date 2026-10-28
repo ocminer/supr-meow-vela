@@ -1,15 +1,38 @@
 #!/usr/bin/env bash
-# HiveOS stats: parse the last "speed" line of the log. khs = inferences/s * 1000 (so HiveOS shows "inf/s" as kH/s-scaled numbers).
-cd "$(dirname "$0")" || exit 1
-. h-manifest.conf
-log="${CUSTOM_LOG_BASENAME}.log"
-line=$(tail -n 200 "$log" 2>/dev/null | grep "speed " | tail -1)
-total=$(echo "$line" | sed -n 's/.*speed \([0-9.]*\) inf\/s.*/\1/p'); total=${total:-0}
-acc=$(echo "$line" | sed -n 's/.*shares A\([0-9]*\).*/\1/p'); rej=$(echo "$line" | sed -n 's/.*R\([0-9]*\) S.*/\1/p')
-hs=(); temp=(); fan=()
-while read -r g r; do hs+=("$r"); done < <(echo "$line" | grep -o "GPU[0-9]* [0-9.]* inf/s" | sed 's/GPU\([0-9]*\) \([0-9.]*\) inf\/s/\1 \2/')
-[[ ${#hs[@]} -eq 0 ]] && hs=("$total")
-for i in "${!hs[@]}"; do temp+=("$(nvidia-smi --id=$i --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo 0)"); fan+=("$(nvidia-smi --id=$i --query-gpu=fan.speed --format=csv,noheader,nounits 2>/dev/null || echo 0)"); done
-khs=$(awk -v t="$total" 'BEGIN{printf "%.3f", t*1000}')
-stats=$(jq -nc --argjson hs "$(printf '%s\n' "${hs[@]}" | jq -R 'tonumber*1000' | jq -s .)" --argjson temp "$(printf '%s\n' "${temp[@]}" | jq -R 'tonumber' | jq -s .)" --argjson fan "$(printf '%s\n' "${fan[@]}" | jq -R 'tonumber' | jq -s .)" --arg ver "$CUSTOM_VERSION" --argjson acc "${acc:-0}" --argjson rej "${rej:-0}" '{hs:$hs, hs_units:"khs", temp:$temp, fan:$fan, uptime:0, ver:$ver, ar:[$acc,$rej], algo:"vela-poi"}')
-echo "$stats"; echo "$khs"
+# Hive SOURCES this callback from its agent. Set khs/stats without changing the
+# caller's directory or printing an API response. One inference is one base unit
+# (hs); Hive's total is always in thousands of base units (khs).
+khs=0
+stats=null
+_vela_hive_stats() {
+  local package_dir snapshot pid result
+  local CUSTOM_NAME CUSTOM_VERSION CUSTOM_LOG_BASENAME CUSTOM_CONFIG_FILENAME CUSTOM_STATS_FILENAME
+  package_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || return 0
+  . "$package_dir/h-manifest.conf" || return 0
+  [[ -r $CUSTOM_STATS_FILENAME ]] || return 0
+  snapshot=$(cat -- "$CUSTOM_STATS_FILENAME" 2>/dev/null) || return 0
+  pid=$(jq -er '.pid | select(type == "number" and . > 0 and . == floor)' <<< "$snapshot" 2>/dev/null) || return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+  # Reject incomplete, stopped or stale snapshots instead of retaining a rate
+  # from a previous run. CUDA supplies the PCI mapping, including --devices and
+  # CUDA_VISIBLE_DEVICES; no second nvidia-smi query or guessed GPU index needed.
+  result=$(jq -ce --argjson now "$(date +%s)" '
+    def nonnegative: type == "number" and . >= 0;
+    select(.schema == 1 and (.timestamp | nonnegative) and
+           .timestamp <= ($now + 5) and .timestamp >= ($now - 60) and
+           (.uptime | nonnegative) and (.version | type == "string") and
+           (.devices | type == "array" and length > 0) and
+           all(.devices[]; (.inf_s | nonnegative) and
+               (.temp == null or (.temp | nonnegative)) and
+               (.fan == null or (.fan | nonnegative)) and
+               (.bus_number == null or (.bus_number | nonnegative))) and
+           (.shares.accepted | nonnegative) and (.shares.rejected | nonnegative) and (.shares.stale | nonnegative)) |
+    {hs: [.devices[].inf_s], hs_units: "hs", temp: [.devices[].temp],
+     fan: [.devices[].fan], bus_numbers: [.devices[].bus_number],
+     uptime: .uptime, ver: .version, ar: [.shares.accepted, (.shares.rejected + .shares.stale)], algo: "vela-poi"}
+  ' <<< "$snapshot" 2>/dev/null) || return 0
+  khs=$(jq -r '(.hs | add) / 1000' <<< "$result") || { khs=0; return 0; }
+  stats=$result
+}
+_vela_hive_stats
+unset -f _vela_hive_stats
