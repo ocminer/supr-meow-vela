@@ -36,7 +36,17 @@ public:
         file.close();
         if (!file) { std::remove(temporary_.c_str()); return false; }
 #ifdef _WIN32
-        bool ok = MoveFileExA(temporary_.c_str(), path_.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+        // Readers and virus scanners can briefly hold a Windows rename lock.
+        // Keep the old complete snapshot and retry for at most 250 ms.
+        bool ok = false;
+        DWORD error = ERROR_SUCCESS;
+        for (int attempt = 0; attempt < 50; ++attempt) {
+            if (MoveFileExA(temporary_.c_str(), path_.c_str(), MOVEFILE_REPLACE_EXISTING)) { ok = true; break; }
+            error = GetLastError();
+            if (error != ERROR_SHARING_VIOLATION && error != ERROR_ACCESS_DENIED) break;
+            Sleep(5);
+        }
+        if (!ok) { std::remove(temporary_.c_str()); SetLastError(error); return false; }
 #else
         bool ok = std::rename(temporary_.c_str(), path_.c_str()) == 0;
 #endif
